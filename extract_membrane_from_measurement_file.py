@@ -164,6 +164,7 @@ def main ():
     else:
         # calls functions to generate it
         generate_iqsweepfit(modes)
+        # Eoin has a python verion of this to use
 
     ######################
     # Fitting the pulses #
