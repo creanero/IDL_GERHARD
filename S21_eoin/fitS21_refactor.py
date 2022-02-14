@@ -17,6 +17,7 @@ from datetime import date
 import os
 import pandas
 from datetime import datetime
+import json
 
 def read_S21_data(filename):
     '''
@@ -140,7 +141,7 @@ def plot_data(S21_data, fit_data):
 
 
 def main():
-    filename='sweep_2021_11_10_3871350000.csv'
+    filename='sweep_2021_11_10_3871350000.json'
     S21_data=read_S21_data(filename)
 
     amplitudes,phases=calculate_derived_data(S21_data)
