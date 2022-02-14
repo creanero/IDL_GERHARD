@@ -122,16 +122,68 @@ def parse_csv_filename(filename):
     #returns what has been parsed
     return basename,timestamp,timestamp_format
 
-def calculate_derived_data(S21_data):
-    amplitudes=calculate_amplitude(S21_data)
-    phases=calculate_phases(S21_data)
-    return(amplitudes,phases)
+def calculate_derived_data(pulse):
+    '''
+    This fuction takes a pulse (a dictionary containing the I and Q data) and calculates the derived values
+    Amplitude, Phase for each measurement (Frequency).
 
-def calculate_amplitude(S21_data):
-    return {}
+    Values are returned by adding them to the dictionary
+    :param pulse:
+    :return:
+    '''
 
-def calculate_phases(S21_data):
-    return {}
+    # calls the function to calculate the amplitude
+    amplitudes=calculate_amplitude(pulse)
+    # normalizes magnitude data relative to max value
+    normalized_amplitudes = amplitudes / np.max(amplitudes)
+    # calculates square magnitude
+    square_magnitudes = normalized_amplitudes ** 2
+    # converts the amplitudes to a list and adds it to the pulse dictionary
+    pulse['Amplitude']=amplitudes.tolist()
+    pulse['Normalised Amplitude']=normalized_amplitudes.tolist()
+    pulse['Square Amplitude']=square_magnitudes.tolist()
+
+    # calls the function to calculate the phase
+    phases=calculate_phases(pulse)
+    # converts the phase to a list and adds it to te pulse dictionary
+    pulse['Phase']=phases.tolist()
+
+def calculate_amplitude(pulse):
+    '''
+    This function takes a pulse  (a dictionary containing I and Q data)
+    and calculates the amplitudes of each value by using pythagoras theorem
+    :param pulse:
+    :return:
+    '''
+
+    # extracts the I values from the list in the pulse into a numpy array
+    I_values = np.array(pulse['I'])
+
+    # extracts the Q values from the list in the pulse into a numpy array
+    Q_values = np.array(pulse['Q'])
+
+    # calculates the amplitude from Pythagoras formula applied to I and Q
+    amplitudes = np.sqrt((I_values) ** 2 + (Q_values) ** 2)
+
+    # returns the amplitudes
+    return amplitudes
+
+def calculate_phases(pulse):
+    '''
+    This function takes a pulse  (a dictionary containing the I and Q data)
+    and calculates the phases using the arctan2 operation in numpy
+    :param pulse:
+    :return:
+    '''
+
+    # extracts the I values from the list in the pulse
+    I_values = pulse['I']
+    # extracts the Q values from the list in the pulse
+    Q_values = pulse['Q']
+
+    # calculates the phases using arctan2 operations via numpy
+    phases = np.arctan2(Q_values, I_values)
+    return phases
 
 def fit_curve(S21_data):
     return{}
@@ -144,11 +196,13 @@ def main():
     filename='sweep_2021_11_10_3871350000.json'
     S21_data=read_S21_data(filename)
 
-    amplitudes,phases=calculate_derived_data(S21_data)
+    for pulse in S21_data['pulses']:
+        calculate_derived_data(pulse)
 
-    fit_data=fit_curve(S21_data)
+        fit_data=fit_curve(pulse)
 
-    plot_data(S21_data, fit_data)
+        plot_data(pulse, fit_data)
+
 
 
 # Call the main script if in the base envionment to allow imports
