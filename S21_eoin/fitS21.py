@@ -19,7 +19,7 @@ import os
 today = date.today() 
 todaystr = today.strftime("%Y_%m_%d") 
 
-#E.17 from Gao thesis - will be used later to  amplitude data fit curve
+#E.17 from w thesis - will be used later to  amplitude data fit curve
 def amplitudeequation(f, A1, A2, A3, A4, Qr, fr):
     return A1 + A2*(f - fr) + ((A3 + A4*(f - fr)) / (1 + 4 * Qr**2  * ((f - fr)/fr)**2 ))  
 
