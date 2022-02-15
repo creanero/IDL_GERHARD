@@ -141,7 +141,7 @@ def calculate_derived_data(pulse):
     # converts the amplitudes to a list and adds it to the pulse dictionary
     pulse['Amplitude']=amplitudes.tolist()
     pulse['Normalised Amplitude']=normalized_amplitudes.tolist()
-    pulse['Square Amplitude']=square_magnitudes.tolist()
+    pulse['Square Magnitude']=square_magnitudes.tolist()
 
     # calls the function to calculate the phase
     phases=calculate_phases(pulse)
@@ -185,12 +185,38 @@ def calculate_phases(pulse):
     phases = np.arctan2(Q_values, I_values)
     return phases
 
-def fit_curve(S21_data):
+def fit_curve(pulse):
+    input_parameters=set_parameters(pulse)
+    popt, pcov =curve_fit(amplitudeequation,
+                          pulse['Frequency'],
+                          pulse['Square Magnitude'],
+                          input_parameters['p0'],
+                          sigma = input_parameters['Weighting'],
+                          absolute_sigma=False,
+                          maxfev=10000)
+    print (popt, pcov)
+    curve_parameters=extract_curve_parameters(popt, pcov)
     return{}
+
+def set_parameters(pulse):
+    input_parameters={}
+    input_parameters['p0']=np.array([1, 1, 1, 1, 10000, np.mean(pulse['Frequency'])]) #initial guesses for fit
+    input_parameters['Weighting'] = np.ones(len(pulse['Frequency']))
+    return input_parameters
+
+def extract_curve_parameters(popt, pcov):
+    return {}
 
 def plot_data(S21_data, fit_data):
     pass
 
+#E.17 from w thesis - will be used later to  amplitude data fit curve
+def amplitudeequation(f, A1, A2, A3, A4, Qr, fr):
+    return A1 + A2*(f - fr) + ((A3 + A4*(f - fr)) / (1 + 4 * Qr**2  * ((f - fr)/fr)**2 ))
+
+#E.11 from Gao thesis - can be used to fit phase data
+def phaseequation(f, theta0, Qr, fr):
+    return -theta0 + 2*np.arctan(2*Qr*(1 - (f/fr)))
 
 def main():
     filename='sweep_2021_11_10_3871350000.json'
