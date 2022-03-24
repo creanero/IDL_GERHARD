@@ -194,8 +194,9 @@ def fit_curve(pulse):
                           sigma = input_parameters['Weighting'],
                           absolute_sigma=False,
                           maxfev=10000)
-    print (popt, pcov)
-    curve_parameters=extract_curve_parameters(popt, pcov)
+    print ('popt', popt)
+    print ('pcov', pcov)
+    curve_parameters=extract_curve_parameters(popt, pcov, pulse)
     return{}
 
 def set_parameters(pulse):
@@ -204,7 +205,8 @@ def set_parameters(pulse):
     input_parameters['Weighting'] = np.ones(len(pulse['Frequency']))
     return input_parameters
 
-def extract_curve_parameters(popt, pcov):
+def extract_curve_parameters(popt, pcov, pulse):
+
     return {}
 
 def plot_data(S21_data, fit_data):
