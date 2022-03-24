@@ -203,7 +203,9 @@ def fit_curve(pulse):
     curve_parameters=extract_curve_parameters(fit_data['popt'], fit_data['popc'], pulse)
     fit_data.update(curve_parameters)
 
-    fitted_data=create_fitted_data(fit_data,pulse)
+    fitted_curve=create_fitted_data(fit_data,pulse)
+
+    align_curve(pulse)
 
     return fit_data
 
@@ -236,9 +238,9 @@ def extract_curve_parameters(popt, pcov, pulse):
 
 def create_fitted_data(fit_data,pulse):
     popt=fit_data['popt']
-    fitted_data={}
+    fitted_curve={}
 
-    fitted_data['Square Magnitude'] = amplitudeequation(pulse['Frequency'],
+    fitted_curve['Square Magnitude'] = amplitudeequation(pulse['Frequency'],
                                            popt[0],
                                            popt[1],
                                            popt[2],
@@ -246,11 +248,23 @@ def create_fitted_data(fit_data,pulse):
                                            popt[4],
                                            popt[5])  # saves square magnitude fit data
 
-    fitted_data['Normalised Amplitude'] = np.abs(np.sqrt(fitted_data['Square Magnitude']))  # takes sqrt to get amplitude
+    fitted_curve['Normalised Amplitude'] = np.abs(np.sqrt(fitted_curve['Square Magnitude']))  # takes sqrt to get amplitude
 
-    fitted_data['Amplitude'] = fitted_data['Normalised Amplitude'] * np.max(pulse['Amplitude'])  # unnormalizes data relative to max value
+    fitted_curve['Amplitude'] = fitted_curve['Normalised Amplitude'] * np.max(pulse['Amplitude'])  # unnormalizes data relative to max value
 
-    return fitted_data
+    return fitted_curve
+
+def align_curve(pulse):
+    centre=get_centre(pulse)
+    pass
+
+def get_centre(pulse):
+    # get centre of loop
+    # find centre of loop
+    centre={}
+    centre['x'] = (np.max(pulse['I']) + np.min(pulse['I'])) / 2
+    centre['y'] = (np.max(pulse['Q']) + np.min(pulse['Q'])) / 2
+    return(centre)
 
 def plot_data(S21_data, fit_data):
     pass
