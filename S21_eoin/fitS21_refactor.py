@@ -256,6 +256,8 @@ def create_fitted_data(fit_data,pulse):
 
 def align_curve(pulse):
     centre=get_centre(pulse)
+    cable_values=calculate_cable_delay(pulse)
+
     pass
 
 def get_centre(pulse):
@@ -265,6 +267,30 @@ def get_centre(pulse):
     centre['x'] = (np.max(pulse['I']) + np.min(pulse['I'])) / 2
     centre['y'] = (np.max(pulse['Q']) + np.min(pulse['Q'])) / 2
     return(centre)
+
+def calculate_cable_delay(pulse):
+    # Next step, remove cable delay term from data.
+    # To do this, normalize by cable delay loop
+    cable_values={}
+    number_of_values=len(pulse['I'])
+
+    # first find total angle, between first and last point
+    # find initial phase
+    initial_phase = np.arctan2(pulse['Q'][0], pulse['I'][0])
+    # finds the final phase
+    final_phase = np.arctan2(pulse['Q'][-1], pulse['I'][-1])
+
+    # creates a linear approximation of the drift between initial and final phase
+    # Using linspace prevents floating point errors from accumulating
+    # thanks Andrew Jaffe (2009) and BRian Burns (2020) via StackOverflow
+    cable_values['Phase']=list(np.linspace(initial_phase,final_phase,number_of_values))
+
+
+    cable_values['Amplitude'] = np.max(pulse['Amplitude'])  # takes max value
+    cable_values['Delay I'] = cable_values['Amplitude'] * np.cos(cable_values['Phase'])  # finds I component of cable
+    cable_values['Delay Q'] = cable_values['Amplitude'] * np.sin(cable_values['Phase'])  # finds Q component of cable
+
+    return cable_values
 
 def plot_data(S21_data, fit_data):
     pass
