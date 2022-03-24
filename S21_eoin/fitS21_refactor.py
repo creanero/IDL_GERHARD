@@ -138,10 +138,14 @@ def calculate_derived_data(pulse):
     normalized_amplitudes = amplitudes / np.max(amplitudes)
     # calculates square magnitude
     square_magnitudes = normalized_amplitudes ** 2
+    # converts the square magnitudes to dB
+    square_magnitudesdb = 10 * np.log10(square_magnitudes)
     # converts the amplitudes to a list and adds it to the pulse dictionary
     pulse['Amplitude']=amplitudes.tolist()
     pulse['Normalised Amplitude']=normalized_amplitudes.tolist()
     pulse['Square Magnitude']=square_magnitudes.tolist()
+    pulse['Square Magnitude dB']=square_magnitudesdb.tolist()
+
 
     # calls the function to calculate the phase
     phases=calculate_phases(pulse)
@@ -186,18 +190,22 @@ def calculate_phases(pulse):
     return phases
 
 def fit_curve(pulse):
+    fit_data={}
     input_parameters=set_parameters(pulse)
-    popt, pcov =curve_fit(amplitudeequation,
-                          pulse['Frequency'],
-                          pulse['Square Magnitude'],
-                          input_parameters['p0'],
-                          sigma = input_parameters['Weighting'],
-                          absolute_sigma=False,
-                          maxfev=10000)
-    print ('popt', popt)
-    print ('pcov', pcov)
-    curve_parameters=extract_curve_parameters(popt, pcov, pulse)
-    return{}
+    fit_data['popt'], fit_data['popc'] =curve_fit(amplitudeequation,
+                                                  pulse['Frequency'],
+                                                  pulse['Square Magnitude'],
+                                                  input_parameters['p0'],
+                                                  sigma = input_parameters['Weighting'],
+                                                  absolute_sigma=False,
+                                                  maxfev=10000)
+
+    curve_parameters=extract_curve_parameters(fit_data['popt'], fit_data['popc'], pulse)
+    fit_data.update(curve_parameters)
+
+    fitted_data=create_fitted_data(fit_data,pulse)
+
+    return fit_data
 
 def set_parameters(pulse):
     input_parameters={}
@@ -206,8 +214,43 @@ def set_parameters(pulse):
     return input_parameters
 
 def extract_curve_parameters(popt, pcov, pulse):
+    curve_parameters={}
+    Q = popt[4]  # total Q is taken from the fit
+    Q = abs(Q)
+    curve_parameters['Q']=Q
 
-    return {}
+    fr = popt[5]  # resonant frequency is taken from the fit
+    # fr_MHz = fr / 10**3 #resonant frequency in MHz
+    curve_parameters['fr'] = fr
+
+    Qi = Q / np.min(pulse['Normalised Amplitude'])  # calculates intrinsic Q using equation 28 from Zmuidzinas review
+    Qi = abs(Qi)
+    curve_parameters['Qi'] = Qi
+
+
+    Qc = Q / (1 - np.min(pulse['Normalised Amplitude']))  # calculates coupling Q using equation 29 from Zmuidzinas review
+    Qc = abs(Qc)
+    curve_parameters['Qc'] = Qc
+
+    return curve_parameters
+
+def create_fitted_data(fit_data,pulse):
+    popt=fit_data['popt']
+    fitted_data={}
+
+    fitted_data['Square Magnitude'] = amplitudeequation(pulse['Frequency'],
+                                           popt[0],
+                                           popt[1],
+                                           popt[2],
+                                           popt[3],
+                                           popt[4],
+                                           popt[5])  # saves square magnitude fit data
+
+    fitted_data['Normalised Amplitude'] = np.abs(np.sqrt(fitted_data['Square Magnitude']))  # takes sqrt to get amplitude
+
+    fitted_data['Amplitude'] = fitted_data['Normalised Amplitude'] * np.max(pulse['Amplitude'])  # unnormalizes data relative to max value
+
+    return fitted_data
 
 def plot_data(S21_data, fit_data):
     pass
