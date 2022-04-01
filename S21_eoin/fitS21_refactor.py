@@ -19,6 +19,8 @@ import pandas
 from datetime import datetime
 import json
 
+import matplotlib.pyplot as plt
+
 def read_S21_data(filename):
     '''
     This file reads in S21 data from a CSV file with headers or JSON file with pulses as appropriate
@@ -204,6 +206,7 @@ def fit_curve(pulse):
     fit_data.update(curve_parameters)
 
     fitted_curve=create_fitted_data(fit_data,pulse)
+    fit_data.update(fitted_curve)
 
     align_curve(pulse)
 
@@ -241,12 +244,7 @@ def create_fitted_data(fit_data,pulse):
     fitted_curve={}
 
     fitted_curve['Square Magnitude'] = amplitudeequation(pulse['Frequency'],
-                                           popt[0],
-                                           popt[1],
-                                           popt[2],
-                                           popt[3],
-                                           popt[4],
-                                           popt[5])  # saves square magnitude fit data
+                                                         popt[0], popt[1], popt[2], popt[3], popt[4], popt[5])  # saves square magnitude fit data
 
     fitted_curve['Normalised Amplitude'] = np.abs(np.sqrt(fitted_curve['Square Magnitude']))  # takes sqrt to get amplitude
 
@@ -257,6 +255,8 @@ def create_fitted_data(fit_data,pulse):
 def align_curve(pulse):
     centre=get_centre(pulse)
     cable_values=calculate_cable_delay(pulse)
+    translated_data=translate_data(pulse, centre, cable_values)
+    rotated_data=rotate_data(translated_data)
 
     pass
 
@@ -287,10 +287,59 @@ def calculate_cable_delay(pulse):
 
 
     cable_values['Amplitude'] = np.max(pulse['Amplitude'])  # takes max value
-    cable_values['Delay I'] = cable_values['Amplitude'] * np.cos(cable_values['Phase'])  # finds I component of cable
-    cable_values['Delay Q'] = cable_values['Amplitude'] * np.sin(cable_values['Phase'])  # finds Q component of cable
+    cable_values['I'] = cable_values['Amplitude'] * np.cos(cable_values['Phase'])  # finds I component of cable
+    cable_values['Q'] = cable_values['Amplitude'] * np.sin(cable_values['Phase'])  # finds Q component of cable
 
     return cable_values
+
+def translate_data(pulse, centre, cable_values):
+    translated_data={}
+
+    # subtract cable delay from IQ data to normalize
+    translated_data['Irebased'] = pulse['I'] - cable_values['I']
+    translated_data['Qrebased'] = pulse['Q'] - cable_values['Q']
+
+    amplitudes_normalized = np.sqrt(translated_data['Irebased'] ** 2 + translated_data['Qrebased'] ** 2)
+
+    # next have to move loop to be centred on (0, 0)
+
+    translated_data['xc'] = (np.max(translated_data['Irebased']) + np.min(translated_data['Irebased'])) / 2
+    translated_data['yc'] = (np.max(translated_data['Qrebased']) + np.min(translated_data['Qrebased'])) / 2
+
+
+
+    # finds I component of cable
+    translated_data['translatedcircleI'] = translated_data['Irebased'] - translated_data['xc']
+    # finds Q component of cable
+    translated_data['translatedcircleQ'] = translated_data['Qrebased'] - translated_data['xc']
+
+    # Calculates amplitudes by pythagoras
+    translated_data['amplitudes_translated'] = np.sqrt(translated_data['translatedcircleI'] ** 2 +
+                                                       translated_data['translatedcircleQ'] ** 2)
+
+    return translated_data
+
+def rotate_data(translated_data):
+    rotated_data={}
+
+    # find alpha - the argument of zc, the centre of the normalized circle
+    alpha = np.arctan2(translated_data['yc'], translated_data['xc'])
+
+    # now rotate everything by alpha
+    theta = np.arctan2(translated_data['translatedcircleQ'], translated_data['translatedcircleI'])
+    # need to rotate every point in this circle by -alpha
+    theta_rotated = theta - alpha  # rotates by alpha
+    rotated_data['I_rotated'] = translated_data['amplitudes_translated']  * np.cos(theta_rotated)  # finds I component of cable
+    rotated_data['Q_rotated'] = translated_data['amplitudes_translated']  * np.sin(theta_rotated)  # finds Q component of cable
+
+    # amplitudes_rotated = np.zeros(number_of_values)
+    amplitudes_rotated = np.sqrt(rotated_data['I_rotated']  ** 2 + rotated_data['Q_rotated']  ** 2)
+
+    # plt.scatter(rotated_data['I_rotated'] , rotated_data['Q_rotated'] , s = 5, color = 'y')
+    # plt.show()
+
+    rotated_data['thetafinal'] = np.unwrap(theta_rotated)
+    return rotated_data
 
 def plot_data(S21_data, fit_data):
     pass
