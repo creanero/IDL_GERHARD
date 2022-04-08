@@ -257,6 +257,7 @@ def align_curve(pulse):
     cable_values=calculate_cable_delay(pulse)
     translated_data=translate_data(pulse, centre, cable_values)
     rotated_data=rotate_data(translated_data)
+    fit_phase()
 
     pass
 
@@ -333,13 +334,16 @@ def rotate_data(translated_data):
     rotated_data['Q_rotated'] = translated_data['amplitudes_translated']  * np.sin(theta_rotated)  # finds Q component of cable
 
     # amplitudes_rotated = np.zeros(number_of_values)
-    amplitudes_rotated = np.sqrt(rotated_data['I_rotated']  ** 2 + rotated_data['Q_rotated']  ** 2)
+    rotated_data['amplitudes_rotated'] = np.sqrt(rotated_data['I_rotated']  ** 2 + rotated_data['Q_rotated']  ** 2)
 
     # plt.scatter(rotated_data['I_rotated'] , rotated_data['Q_rotated'] , s = 5, color = 'y')
     # plt.show()
 
     rotated_data['thetafinal'] = np.unwrap(theta_rotated)
     return rotated_data
+
+def fit_phase():
+    pass
 
 def plot_data(S21_data, fit_data):
     pass
