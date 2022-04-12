@@ -19,7 +19,10 @@ import pandas
 from datetime import datetime
 import json
 
+from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
+
+from matplotlib.ticker import EngFormatter
 
 def read_S21_data(filename):
     '''
@@ -208,7 +211,8 @@ def fit_curve(pulse):
     fitted_curve=create_fitted_data(fit_data,pulse)
     fit_data.update(fitted_curve)
 
-    align_curve(pulse)
+    adjusted_fit=align_curve(pulse,curve_parameters,fitted_curve)
+    fit_data.update(adjusted_fit)
 
     return fit_data
 
@@ -252,14 +256,19 @@ def create_fitted_data(fit_data,pulse):
 
     return fitted_curve
 
-def align_curve(pulse):
+def align_curve(pulse,curve_parameters,fitted_curve):
+    aligned_curve={}
     centre=get_centre(pulse)
     cable_values=calculate_cable_delay(pulse)
     translated_data=translate_data(pulse, centre, cable_values)
     rotated_data=rotate_data(translated_data)
-    fit_phase()
 
-    pass
+    phase_fits = fit_phase(pulse,rotated_data,curve_parameters)
+    aligned_curve.update(phase_fits)
+
+    adjusted_fit=adjust_fit(aligned_curve,cable_values,rotated_data,translated_data,fitted_curve)
+    aligned_curve.update(adjusted_fit)
+    return aligned_curve
 
 def get_centre(pulse):
     # get centre of loop
@@ -324,12 +333,12 @@ def rotate_data(translated_data):
     rotated_data={}
 
     # find alpha - the argument of zc, the centre of the normalized circle
-    alpha = np.arctan2(translated_data['yc'], translated_data['xc'])
+    rotated_data['alpha'] = np.arctan2(translated_data['yc'], translated_data['xc'])
 
     # now rotate everything by alpha
     theta = np.arctan2(translated_data['translatedcircleQ'], translated_data['translatedcircleI'])
     # need to rotate every point in this circle by -alpha
-    theta_rotated = theta - alpha  # rotates by alpha
+    theta_rotated = theta - rotated_data['alpha']  # rotates by alpha
     rotated_data['I_rotated'] = translated_data['amplitudes_translated']  * np.cos(theta_rotated)  # finds I component of cable
     rotated_data['Q_rotated'] = translated_data['amplitudes_translated']  * np.sin(theta_rotated)  # finds Q component of cable
 
@@ -342,10 +351,152 @@ def rotate_data(translated_data):
     rotated_data['thetafinal'] = np.unwrap(theta_rotated)
     return rotated_data
 
-def fit_phase():
+def fit_phase(pulse,rotated_data,curve_parameters):
+    phase_fits={}
+
+    # now, fit this to phase equation
+    p_phase = np.array([1, curve_parameters['Q'], curve_parameters['fr']])
+
+    # weight_phase = np.ones(number_of_values) #set relative error everywhere to 1
+    # weight_phase[resonant_index - 250: resonant_index + 250] = 0.05 #set error around resonant to smaller
+
+    # popt_phase, pcov_phase = curve_fit(phaseequation, freqsMHz, thetafinal, p_phase, sigma = weight_phase, absolute_sigma=False)
+    popt_phase, pcov_phase = curve_fit(phaseequation, pulse['Frequency'], rotated_data['thetafinal'], p_phase)
+
+    # print(f'theta0 = {popt[0]}, Qr = {popt[1]}, fr = {popt[2]})')
+
+    phase_fits['theta0_phase'] = popt_phase[0]
+    phase_fits['Qr_phase'] = popt_phase[1]
+    phase_fits['fr_phase'] = popt_phase[2]
+
+    # fr_MHz_phase = fr_phase / 10**3
+
+    # plt.plot(freqs, phaseequation(freqs, popt_phase[0], popt_phase[1], popt_phase[2]), 'r')
+
+    phase_fits['Q_phase'] = abs(phase_fits['Qr_phase'])
+
+    phase_fits['Qi_phase'] = abs(phase_fits['Q_phase'] / (np.min(pulse['Normalised Amplitude'])))  # calulculates instrinsic Q using equation 28 from Zmuidzinas review
+
+
+    phase_fits['Qc_phase'] = abs(phase_fits['Q_phase']  / (1 - np.min(pulse['Normalised Amplitude'])))  # calulculates instrinsic Q using equation 29 from Zmuidzinas review
+
+
+    # print(f'Amplitude fit: Q = {Q}, Qc = {Qc}, Qi = {Qi}, fr = {fr*10**9}')
+    # print(f'Phase fit: Q = {Q_phase}, Qc = {Qc_phase}, Qi = {Qi_phase}, fr = {fr_phase}')
+
+    # final step, convert phase and amplitude fit back to IQ data and replot fit
+    phase_fits['fitted_phase'] = phaseequation(pulse['Frequency'], phase_fits['theta0_phase'], phase_fits['Qr_phase'], phase_fits['fr_phase'])
+
+    return phase_fits
+
+
+def adjust_fit(aligned_phase,cable_values,rotated_data,translated_data,fitted_curve):
+    adjusted_fit={}
+
+    fitted_phase=aligned_phase['fitted_phase']
+    # fitted_phase_rotated = np.zeros(number_of_values)
+    fitted_phase_rotated = fitted_phase + rotated_data['alpha']
+
+    fitI = np.mean(rotated_data['amplitudes_rotated']) * np.cos(fitted_phase)  # finds I component of fit
+    fitQ = np.mean(rotated_data['amplitudes_rotated']) * np.sin(fitted_phase)  # finds Q component of fit
+
+    fitIrotated = np.mean(rotated_data['amplitudes_rotated']) * np.cos(fitted_phase_rotated)  # finds I component of fit
+    fitQrotated = np.mean(rotated_data['amplitudes_rotated']) * np.sin(fitted_phase_rotated)  # finds Q component of fit
+
+    fitItranslated = fitIrotated + translated_data['xc']
+    fitQtranslated = fitQrotated + translated_data['yc']
+
+    fitIunnormalized = fitItranslated + cable_values['I']
+    fitQunnormalized = fitQtranslated + cable_values['Q']
+
+    # get phase of unnormalize data
+    fitphaseunnormalized = np.arctan2(fitQunnormalized, fitIunnormalized)
+
+    # last thing to do, combine fitted amplitude and phase data
+    adjusted_fit['Ifitfinal'] = fitted_curve['Amplitude'] * np.cos(fitphaseunnormalized)  # finds I component of cable
+    adjusted_fit['Qfitfinal']  = fitted_curve['Amplitude'] * np.sin(fitphaseunnormalized)  # finds Q component of cable
+
+    adjusted_fit['thetafinal']=rotated_data['thetafinal']
+    return adjusted_fit
+
+def plot_data(pulse, fit_data,filename):
+    pp=prepare_file(filename)
+
+    plot_dB_freq(pp,pulse,fit_data)
+    plot_unwrapped_rotated(pp,pulse,fit_data)
+    plot_original_fitted(pp,pulse,fit_data)
+
+
+    pp.close()
     pass
 
-def plot_data(S21_data, fit_data):
+
+def prepare_file(filepath):
+    # gets todays date. This is used in the name of the results files that are saved.
+    today = date.today()
+    todaystr = today.strftime("%Y_%m_%d")
+
+    # make name of pdf file to save plots ot
+    savefilename = os.path.splitext(filepath)[0] + '_Fit_' + todaystr + '.pdf'
+
+    # creates pdf to save plots
+    pp = PdfPages(savefilename)
+    return pp
+
+def plot_dB_freq(pp,pulse,fit_data):
+    # now plot unwrapped, rotated phase data
+    plt.figure()
+    plt.scatter(pulse['Frequency'], pulse['Square Magnitude dB'], marker='.', s=5)
+    plt.title('Normalized $|S_{21}|^2$ (dB) vs Frequency of Raw Data and Fit')
+    plt.xlabel('Frequency (Hz)')
+    plt.xticks(rotation=45)
+    plt.ylabel('$|S_{21}|^2$ (dB)')
+    # ax=plt.axes()
+    # #ax.xaxis.set_major_formatter(EngFormatter(unit='Hz'))
+    # ax.xaxis.set_tick_params(rotation=90)
+    plt.grid()
+    plt.plot(pulse['Frequency'], 10*np.log10(fit_data['Square Magnitude']), 'r')
+
+    boxprops = dict(boxstyle='round', facecolor='wheat', alpha=0.5)  # properties of text box on plot
+    boxstr = f"Q = {round(fit_data['Q_phase'])}\nQc = {round(fit_data['Qc_phase'])}\nQi = {round(fit_data['Qi_phase'])}\nfr = {round(fit_data['fr_phase'], 4)} Hz"  # contents of text box
+    plt.text(np.min(pulse['Frequency']), np.min(pulse['Square Magnitude dB']), boxstr, fontsize=12, bbox=boxprops)  # adds textbox to plot
+    #plt.show()
+
+    plt.savefig(pp, format='pdf', bbox_inches="tight")
+    pass
+
+
+def plot_unwrapped_rotated(pp,pulse,fit_data):
+    # now plot unwrapped, rotated phase data
+    plt.figure()
+    plt.scatter(pulse['Frequency'], fit_data['thetafinal'], marker='.', s=5)
+    plt.title('Phase vs Frequency')
+    plt.xlabel('Frequency (Hz)')
+    plt.xticks(rotation=45)
+    plt.ylabel('Phase (rads)')
+    plt.plot(pulse['Frequency'], fit_data['fitted_phase'], 'r')
+    plt.grid()
+    boxprops = dict(boxstyle='round', facecolor='wheat', alpha=0.5)  # properties of text box on plot
+    boxstr = f"Q = {round(fit_data['Q_phase'])}\nQc = {round(fit_data['Qc_phase'])}\nQi = {round(fit_data['Qi_phase'])}\nfr = {round(fit_data['fr_phase'], 4)} Hz"  # contents of text box
+
+    # boxstr = f'Q = {round(Q_phase)}\nQc = {round(Qc_phase)}\nQi = {round(Qi_phase)}\nfr = {round(fr_phase, 4)} GHz'  # contents of text box
+    plt.text(np.min(pulse['Frequency']), np.min(fit_data['thetafinal']), boxstr, fontsize=12, bbox=boxprops)  # adds textbox to plot
+    #plt.show()
+
+    plt.savefig(pp, format='pdf', bbox_inches="tight")
+    pass
+
+def plot_original_fitted(pp,pulse,fit_data):
+    # now plot just origianl IQ data and fitted data
+    plt.figure()
+    plt.scatter(pulse['I'], pulse['Q'], marker='.', s=5)
+    plt.plot(fit_data['Ifitfinal'], fit_data['Qfitfinal'], 'r')
+    plt.xlabel('I')
+    plt.ylabel('Q')
+    plt.title('Raw and Fitted IQ Data')
+    plt.grid()
+    #plt.show()
+    plt.savefig(pp, format='pdf', bbox_inches="tight")
     pass
 
 #E.17 from w thesis - will be used later to  amplitude data fit curve
@@ -357,15 +508,15 @@ def phaseequation(f, theta0, Qr, fr):
     return -theta0 + 2*np.arctan(2*Qr*(1 - (f/fr)))
 
 def main():
-    filename='sweep_2021_11_10_3871350000.json'
-    S21_data=read_S21_data(filename)
+    filepath='./sweep_2021_11_10_3871350000.json'
+    S21_data=read_S21_data(filepath)
 
     for pulse in S21_data['pulses']:
         calculate_derived_data(pulse)
 
         fit_data=fit_curve(pulse)
 
-        plot_data(pulse, fit_data)
+        plot_data(pulse, fit_data, filepath)
 
 
 
