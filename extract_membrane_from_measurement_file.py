@@ -85,10 +85,29 @@ def fit_pulses(modes):
     procedure to call the least square fit for every single pulse
     :return:
     """
-    
+    set_variables(modes)
+    set_filenames(modes)
+    set_counters()
+    read_header_sweep() # this will probably be replaced
+    find_centre()
+
     warnings.warn('fit_pulses currently empty.')
     pass
 
+def set_variables(modes):
+    pass
+
+def set_filenames(modes):
+    pass
+
+def set_counters():
+    pass
+
+def read_header_sweep():
+    pass
+
+def find_centre():
+    pass
 
 def generate_iqsweepfit():
     """
